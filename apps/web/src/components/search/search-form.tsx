@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -32,12 +33,23 @@ interface SearchFormProps {
 }
 
 export function SearchForm({ defaultJobId, onSearch, isPending }: SearchFormProps) {
-  const { data: jobs = [] } = useJobs();
+  const { data: jobs = [], isLoading } = useJobs();
   const completed = jobs.filter((j) => j.status === "complete");
 
   const [jobId, setJobId] = useState(defaultJobId ?? "");
   const [query, setQuery] = useState("");
   const [k, setK] = useState(12);
+
+  // Re-sync the preselected job when an arriving/changing `?job=<id>` param
+  // reaches us after mount (client-side nav, or the param present before jobs
+  // have loaded). Adjusting state during render — the React-recommended
+  // alternative to a setState-in-effect — and guarding on a truthy id so a
+  // plain `/search` visit never clobbers a manual selection.
+  const [prevDefaultJobId, setPrevDefaultJobId] = useState(defaultJobId);
+  if (defaultJobId !== prevDefaultJobId) {
+    setPrevDefaultJobId(defaultJobId);
+    if (defaultJobId) setJobId(defaultJobId);
+  }
 
   const canSubmit = jobId.length > 0 && query.trim().length > 0;
 
@@ -45,6 +57,32 @@ export function SearchForm({ defaultJobId, onSearch, isPending }: SearchFormProp
     if (!canSubmit) return;
     onSearch({ jobId, query: query.trim(), k });
   };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-5 space-y-5">
+          <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-9 w-full" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-14" />
+              <Skeleton className="h-9 w-28" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-56" />
+            <Skeleton className="h-9 w-full" />
+          </div>
+          <div className="flex justify-end">
+            <Skeleton className="h-9 w-28" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (completed.length === 0) {
     return (

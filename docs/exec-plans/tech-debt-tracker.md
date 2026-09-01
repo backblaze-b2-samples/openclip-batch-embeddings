@@ -75,3 +75,16 @@ Low-severity polish, left for a follow-up; none blocks the core flow.
 | Custom `FileNotFoundError` shadowed the built-in | Renamed to `FileNotFoundServiceError` |
 | Dropzone accepted any file type client-side | `accept` allow-list mirroring backend `ALLOWED_TYPES` (tested for drift) |
 | No test harness for feature specs | pytest suite across upload, files, activity, errors, validation, rate limit, pagination |
+
+## 2026-09-01 — verify
+
+Nitpicks surfaced by the 3-lens UX verify (all blockers/frictions were fixed this run: post-upload next-step CTA, live determinate run-progress + polling on the draft→run path, and a search-page loading skeleton + robust `?job=` preselect). Backlog only — do not loop.
+
+- Corpus & Jobs empty states — copy points a first-time user at the dev CLI `python scripts/seed-corpus.py` → leaks an implementation detail onto a UI surface (a primary CTA is present, so harmless) (.local/verify/A/04-corpus-before.png)
+- Upload complete rows — each success row links "View in Files" (→ `/files` raw bucket) → points away from the goal-relevant `/corpus` gallery where the uploads become the pipeline's source (.local/verify/A/07-upload-complete.png)
+- Job detail (failed job) — a failed job's config is locked (status ≠ draft) → the offending `source_prefix` can't be edited; the user must delete + recreate (.local/verify/B/15-job-failed.png)
+- Job detail (running) — the determinate progress bar fill stays flat for ~10s at run start before advancing → the backend throttles the first `vector_count` write; the spinner + "Embedding images… X/Y" stage label are live throughout, so it never looks frozen (.local/verify/B/r2-07-run-inprogress-3.png)
+- Job detail (running) — the Radix `Progress` bar reports `data-state="indeterminate"` / no `aria-valuenow` while advancing visually → minor a11y gap for assistive tech on a public-facing sample (.local/verify/B/r2-07-run-inprogress-5.png)
+- Semantic Search job selector — echoes model + vector count but not precision (float32 vs float16) → two jobs differing only by precision are indistinguishable in the dropdown (.local/verify/C/cr2-06-search-selector.png)
+- Search results grid — on the first search, below-the-fold thumbnails can render blank-grey briefly (lazy-load / presigned-URL warm-up) → self-heals on scroll or the next search (.local/verify/C/search-dog.png)
+- Upload — a single large file occasionally 500s (transient B2 write / `IncompleteRead`) → the UI handles it well (inline red error + Retry + live summary) and the goal still completes with the remaining files (.local/verify/A/r3-04-upload-complete.png)

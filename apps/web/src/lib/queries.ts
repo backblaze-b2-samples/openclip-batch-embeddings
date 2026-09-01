@@ -27,8 +27,10 @@ import {
   type JobFormValues,
 } from "@/lib/api-client";
 import type {
+  EmbeddingJob,
   FileMetadata,
   FileMetadataDetail,
+  JobSummary,
 } from "@openclip-batch-embeddings/shared";
 
 // Single source of truth for query keys. Keep these tightly scoped so that
@@ -186,8 +188,22 @@ export function useDeleteFile() {
 
 // --- Embedding jobs + corpus + dashboard ---
 
+// A run writes `status = running` to the B2 manifest, spends 10-60s embedding,
+// then writes the terminal `complete`/`failed` — so a jobs view opened (or
+// reloaded) mid-run reads `running` and, with no push channel, must poll to
+// advance in place. Poll only while a job is actively running; a finished or
+// not-yet-run (`draft`) job is static, so its view stays quiet.
+const JOB_POLL_INTERVAL_MS = 2000;
+
 export function useJobs() {
-  return useQuery({ queryKey: qk.jobs(), queryFn: getJobs });
+  return useQuery({
+    queryKey: qk.jobs(),
+    queryFn: getJobs,
+    refetchInterval: (query) =>
+      query.state.data?.some((job) => job.status === "running")
+        ? JOB_POLL_INTERVAL_MS
+        : false,
+  });
 }
 
 export function useJob(id: string | undefined) {
@@ -195,6 +211,8 @@ export function useJob(id: string | undefined) {
     queryKey: qk.job(id ?? ""),
     queryFn: () => getJob(id as string),
     enabled: !!id,
+    refetchInterval: (query) =>
+      query.state.data?.status === "running" ? JOB_POLL_INTERVAL_MS : false,
   });
 }
 
@@ -234,6 +252,39 @@ export function useRunJob(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => runJob(id),
+    // The run POST blocks for the whole 10-60s embed, so the cached job status
+    // would otherwise stay "draft" the entire time — a frozen-looking page and,
+    // worse, `useJob`'s status-keyed poll never engages. Optimistically flip to
+    // "running" so (a) the badge updates instantly, (b) polling turns on, and
+    // (c) the prior run's artifacts clear so a Re-run doesn't show stale values
+    // under a "Running" badge. `onSuccess` reconciles with the server.
+    onMutate: () => {
+      qc.setQueryData<EmbeddingJob>(qk.job(id), (old) =>
+        old
+          ? {
+              ...old,
+              status: "running",
+              vector_count: 0,
+              shard_count: 0,
+              shard_bytes: 0,
+              index_bytes: 0,
+              duration_seconds: null,
+              throughput_per_second: null,
+              index_key: null,
+            }
+          : old,
+      );
+      // Mirror the flip into the list cache so the /jobs badge tracks too.
+      qc.setQueryData<JobSummary[]>(qk.jobs(), (old) =>
+        old
+          ? old.map((job) =>
+              job.id === id
+                ? { ...job, status: "running", vector_count: 0 }
+                : job,
+            )
+          : old,
+      );
+    },
     // A run rewrites shards, the index, and every dashboard aggregation.
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.all }),
   });

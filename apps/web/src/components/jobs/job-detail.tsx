@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Play, Pencil, Trash2, ArrowLeft, Search } from "lucide-react";
+import { Play, Pencil, Trash2, ArrowLeft, Search, Loader2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import {
@@ -81,6 +82,21 @@ export function JobDetail({ id }: { id: string }) {
   const running = runMutation.isPending || job.status === "running";
   const isComplete = job.status === "complete";
 
+  // Determinate progress once the backend has published the corpus total;
+  // null until then, so the bar shows an indeterminate "Starting…" state.
+  const pct =
+    job.image_count > 0
+      ? Math.round((job.vector_count / job.image_count) * 100)
+      : null;
+  let stageLabel: string;
+  if (job.image_count > 0 && job.vector_count < job.image_count) {
+    stageLabel = `Embedding images… ${job.vector_count}/${job.image_count}`;
+  } else if (job.image_count > 0) {
+    stageLabel = "Building index…";
+  } else {
+    stageLabel = "Starting…";
+  }
+
   return (
     <div className="space-y-8">
       <Button asChild variant="ghost" size="sm" className="-ml-2">
@@ -153,6 +169,21 @@ export function JobDetail({ id }: { id: string }) {
       {job.status === "failed" && job.error && (
         <Card className="border-destructive/40">
           <CardContent className="p-4 text-sm text-destructive">{job.error}</CardContent>
+        </Card>
+      )}
+
+      {running && (
+        <Card className="border-[var(--chart-2)]/40">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-[var(--chart-2)]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>{stageLabel}</span>
+            </div>
+            <Progress
+              value={pct ?? undefined}
+              className={pct === null ? "animate-pulse" : ""}
+            />
+          </CardContent>
         </Card>
       )}
 

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { Images, Layers } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dropzone } from "./dropzone";
@@ -27,6 +29,7 @@ export function UploadForm() {
   const hasCompleted = items.some(
     (i) => i.status === "complete" || i.status === "error",
   );
+  const hasSucceeded = items.some((i) => i.status === "complete");
   const summary = uploadQueueSummary(items);
 
   return (
@@ -49,6 +52,33 @@ export function UploadForm() {
           </div>
         )}
         <UploadProgress disabled={uploading} items={items} onRetry={retry} />
+        {hasSucceeded && !uploading && (
+          // Uploads land under corpus/, so a finished batch is one step from the
+          // goal: embed it. Point the user there instead of dead-ending at the
+          // raw bucket browser.
+          <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">Uploaded to corpus/ — ready to embed</p>
+              <p className="text-xs text-muted-foreground">
+                Create an Embedding Job to encode these images, or browse the corpus gallery.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button asChild size="sm">
+                <Link href="/jobs/new">
+                  <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+                  Create Embedding Job
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/corpus">
+                  <Images className="h-3.5 w-3.5" aria-hidden="true" />
+                  View Corpus
+                </Link>
+              </Button>
+            </div>
+          </div>
+        )}
         {hasCompleted && !uploading && (
           <div className="flex justify-end">
             <Button

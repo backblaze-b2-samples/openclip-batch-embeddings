@@ -97,9 +97,19 @@ def run_job(job_id: str) -> EmbeddingJob:
                 "on the Upload page (they land in corpus/) or run the seed script.",
             )
 
+        # Publish the total up front so pollers can render a determinate bar.
+        job.image_count = len(keys)
+        job.updated_at = datetime.now(UTC)
+        embedding_jobs.save_job(job)
+
         started = time.monotonic()
         vectors: list[np.ndarray] = []
         embedded_keys: list[str] = []
+        # Throttled progress writes: let pollers watch vector_count climb
+        # without a B2 PutObject per image. Save at most every ~1.5s and every
+        # ~10% of the corpus, capping the run to ~10-12 manifest writes.
+        last_saved = started
+        save_every = max(1, len(keys) // 10)
         for key in keys:
             data = get_bytes(key)
             if data is None:
@@ -109,6 +119,12 @@ def run_job(job_id: str) -> EmbeddingJob:
                 embedded_keys.append(key)
             except Exception as exc:
                 logger.warning("Skipping unreadable image %s: %s", key, exc)
+            now = time.monotonic()
+            if len(embedded_keys) % save_every == 0 and now - last_saved >= 1.5:
+                job.vector_count = len(embedded_keys)
+                job.updated_at = datetime.now(UTC)
+                embedding_jobs.save_job(job)
+                last_saved = now
 
         if not vectors:
             return _fail(job, "No readable images to embed under the source prefix.")
