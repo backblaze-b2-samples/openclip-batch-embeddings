@@ -161,9 +161,10 @@ class UploadError(Exception):
         super().__init__(detail)
 
 
-# Every object the app writes lives under this prefix; the API mints the key so
-# the client never chooses where its bytes land.
-UPLOAD_PREFIX = "uploads/"
+# Uploads land under the corpus prefix — the folder the embedding pipeline reads
+# its source images from — so a drag-and-drop upload is immediately embeddable.
+# The API mints the key so the client never chooses where its bytes land.
+UPLOAD_PREFIX = settings.corpus_prefix
 # Leading bytes fetched for the post-upload sniff. The deepest signature check
 # reads data[8:12]; 512 leaves generous headroom for any future signature.
 _SNIFF_BYTES = 512

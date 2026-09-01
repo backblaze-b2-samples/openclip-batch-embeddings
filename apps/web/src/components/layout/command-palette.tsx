@@ -10,6 +10,9 @@ import {
   FileIcon,
   Moon,
   Sun,
+  Layers,
+  Search,
+  Images,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -37,6 +40,9 @@ interface CommandPaletteProps {
 
 const routes = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
+  { label: "Jobs", href: "/jobs", icon: Layers },
+  { label: "Search", href: "/search", icon: Search },
+  { label: "Corpus", href: "/corpus", icon: Images },
   { label: "Upload", href: "/upload", icon: Upload },
   { label: "Files", href: "/files", icon: FolderOpen },
   { label: "Settings", href: "/settings", icon: Settings },

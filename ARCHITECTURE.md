@@ -4,17 +4,15 @@
 ## Components
 
 - **apps/web/** — Next.js 16 frontend (App Router, Tailwind v4, shadcn/ui)
-  - Dashboard with stats, upload chart, recent uploads
-  - File upload with drag-and-drop, progress tracking
-  - File browser with preview, download, delete
-  - Dark mode via `next-themes`
+  - Jobs (primary entity): list / create / detail / edit / delete / **run**
+  - Semantic search (text → nearest corpus images) + corpus gallery
+  - Dashboard with embedding-pipeline metrics + write-amplification projection
+  - File upload (lands under `corpus/`) and full-bucket file browser
 - **services/api/** — FastAPI backend (layered architecture)
-  - REST API for file upload, listing, deletion
-  - B2 S3 integration via boto3
-  - File metadata extraction (images, PDFs)
-  - Health check endpoint with B2 connectivity verification
-  - Structured JSON logging with request tracing
-  - Prometheus-format metrics endpoint
+  - Embedding-job lifecycle + the run pipeline (stream → encode → shards → index)
+  - Local OpenCLIP encoder (torch/open_clip, isolated) + per-job FAISS index
+  - B2 S3 integration via boto3, isolated in `repo/`
+  - Health check, structured JSON logging, Prometheus-format metrics
 - **packages/shared/** — TypeScript type definitions
   - Mirrors Pydantic models from the API
   - Consumed by `apps/web/` as workspace dependency
@@ -39,7 +37,7 @@ runtime/   FastAPI routes — calls service, never repo directly
 
 1. Dependencies flow downward only: `types` -> `config` -> `repo` -> `service` -> `runtime`
 2. No backward imports (e.g., service must not import from runtime)
-3. `boto3` only allowed in `repo/` layer
+3. `boto3` only allowed in `repo/` layer; `torch` / `open_clip` only in `service/openclip_model.py`
 4. All boundary data uses Pydantic models (no raw dicts across layers)
 5. Authored Python files under `services/api/app/` stay under 300 lines
 
@@ -49,17 +47,17 @@ runtime/   FastAPI routes — calls service, never repo directly
 services/api/
   main.py                  App entrypoint, middleware, router registration
   app/
-    types/                 Pydantic models (FileMetadata, UploadStats, etc.)
+    types/                 Pydantic models (jobs, search, pipeline, files, ...)
     config/                Settings loaded from environment
-    repo/                  B2 S3 client (data access layer)
-    service/               Business logic (upload, files, metadata)
-    runtime/               FastAPI route handlers
-  tests/                   pytest tests (structural + integration)
+    repo/                  B2 S3 client + byte/job/embedding/index stores
+    service/               openclip_model, index, embedding_jobs, embedding_run, search, corpus, pipeline_stats
+    runtime/               FastAPI route handlers (jobs, search, corpus, pipeline, files, upload)
+  tests/                   pytest tests (structural + integration + pipeline)
 ```
 
 ## Boundary Invariants
 
-- **No external SDK leakage**: `boto3` is only imported in `app/repo/`. All other layers interact with B2 through the repo interface.
+- **No external SDK/model leakage**: `boto3` is only imported in `app/repo/`, and `torch` / `open_clip` only in `service/openclip_model.py`. The custom B2 user agent (`user_agent_extra="b2ai-openclip-batch-embeddings"`) rides on the single boto3 S3 client in `repo/b2_client.py`; torch/faiss never touch B2, so there is no UA deviation to reconcile. Device is auto-detected CUDA → Apple MPS → CPU (default CPU); the heavy imports + ~600 MB weight download are lazy (first embed only), so imports and non-live tests stay network-free.
 - **No raw dicts at boundaries**: All data crossing layer boundaries uses typed Pydantic models.
 - **No cross-layer mutable state**: Configuration is read-only after init, and no mutable state is shared *between* layers. Intra-layer caches/counters (the listing cache in `repo/list_cache.py`, the B2 connectivity cache in `repo/b2_client.py`, the download counter in `repo/counter.py`, the rate-limit and metrics state in `runtime/`) are module-local and guarded by a `threading.Lock`. The listing cache also owns the only background thread in the app: a stale entry is served immediately while that thread re-scans (stale-while-revalidate), and `main.lifespan` warms it once at startup so no user pays for the cold full-bucket scan.
 - **Validated inputs**: All HTTP inputs validated by FastAPI/Pydantic. File keys reject empty and path-traversal patterns; optional prefix confinement via `ALLOWED_KEY_PREFIX` (off by default).
@@ -87,15 +85,21 @@ services/api/
   4.5 MB payload ceiling entirely — the bucket must allow the deploy origin in
   its CORS. A two-separate-Projects alternative and the full delivery contract
   live in [infra/vercel/README.md](infra/vercel/README.md).
+  - **Caveat for this app:** the embedding run depends on native ML libraries
+    (torch, faiss) that do **not** fit Vercel's serverless Python functions, so
+    the `/jobs/{id}/run` and `/search` paths need a self-hosted API runtime with
+    the ML stack (a container or VM), not Vercel serverless. Vercel can still host
+    the frontend + the light B2 endpoints.
 
 External provisioning and deployment remain explicit user-approved actions.
 
 ## Data Stores
 
-- **Backblaze B2** — object storage (S3-compatible API)
-  - All uploaded files stored in a single bucket
-  - File listing and metadata via S3 `list_objects_v2` / `head_object`
-  - No application database — B2 is the sole data store
+- **Backblaze B2** — object storage (S3-compatible API), the sole data store (no database)
+  - `corpus/` — source images the pipeline embeds
+  - `embeddings/<job>/shard-NNN.npy` — per-job float32/float16 embedding shards
+  - `indexes/<job>/faiss.index` + `id_map.json` — per-job FAISS index + id→key map
+  - `jobs/<id>.json` — job manifests (config + status + run stats)
 
 ## External Services
 
@@ -111,10 +115,12 @@ See [docs/SECURITY.md](docs/SECURITY.md) for full security documentation.
 
 ## Data Flows
 
-- **Upload**: Browser -> `POST /upload/presign` (API validates the declared file + signs a PUT) -> Browser PUTs bytes **directly to B2** -> `POST /upload/verify` (API HEADs + Range-sniffs the stored object) -> response
-- **List**: Browser -> `GET /files` -> service calls repo -> returns file list
-- **Download**: Browser -> `GET /files/{key}/download` -> service validates key -> repo generates presigned URL -> browser downloads
-- **Delete**: Browser -> `DELETE /files/{key}` -> service validates key -> repo deletes from B2
+- **Create job**: Browser -> `POST /jobs` (JobCreate) -> `service.embedding_jobs.create_job` writes `jobs/<id>.json` -> returns the draft job
+- **Run job** (marquee): Browser -> `POST /jobs/{id}/run` -> `service.embedding_run.run_job` lists `corpus/` images (S3 `ListObjectsV2`), `GetObject`s each, encodes on-device with OpenCLIP, writes `.npy` shards to `embeddings/<id>/` (`PutObject`), builds an `IndexIDMap(IndexFlatIP(512))` and uploads it to `indexes/<id>/faiss.index` + `id_map.json`, then updates the manifest. Runs in Starlette's threadpool; records failure on the manifest rather than 500ing.
+- **Search**: Browser -> `POST /search` (job_id + query) -> embed the text query -> load the job's index + id map from B2 -> exact cosine top-k -> hydrate hits with presigned image URLs
+- **Corpus / dashboard**: `GET /corpus` lists `corpus/` images with presigned thumbnails; `GET /pipeline/stats` rolls the job manifests + corpus listing into metrics, the write-amplification projection, and per-job throughput
+- **Upload**: Browser -> `POST /upload/presign` -> Browser PUTs bytes **directly to B2** under `corpus/` -> `POST /upload/verify`
+- **List / Download / Delete** (full-bucket explorer): `GET /files`, `GET /files/{key}/download`, `DELETE /files/{key}` via the repo layer
 
 ## Observability
 
@@ -137,10 +143,12 @@ silently drift from FastAPI. `GET /metrics` is intentionally server-only.
 
 ## Canonical Files
 
-- Layered API handler: `services/api/app/runtime/upload.py`
-- Service orchestration: `services/api/app/service/upload.py`
-- B2 data access (repo layer): `services/api/app/repo/b2_client.py`
-- Pydantic models: `services/api/app/types/` (`files.py`, `upload.py`, `stats.py`, `formatting.py`)
+- Marquee run pipeline: `services/api/app/service/embedding_run.py`
+- OpenCLIP encoder (contained): `services/api/app/service/openclip_model.py`
+- Per-job FAISS index: `services/api/app/service/index.py`
+- Layered API handler: `services/api/app/runtime/jobs.py`
+- B2 data access (repo layer): `services/api/app/repo/b2_client.py`, `repo/b2_object_io.py`
+- Pydantic models: `services/api/app/types/` (`jobs.py`, `search.py`, `pipeline.py`, `files.py`)
 - Config (pydantic-settings): `services/api/app/config/settings.py`
 - Structural tests: `services/api/tests/test_structure.py`
 - OpenAPI contract: `docs/api/openapi.json`
@@ -150,9 +158,14 @@ silently drift from FastAPI. `GET /metrics` is intentionally server-only.
 
 ## Core Features
 
+- [Embedding Jobs](docs/features/embedding-jobs.md)
+- [Batch Embedding Pipeline](docs/features/batch-embedding-pipeline.md)
+- [Vector Index](docs/features/vector-index.md)
+- [Semantic Search](docs/features/semantic-search.md)
+- [Corpus Library](docs/features/corpus-library.md)
+- [Dashboard](docs/features/dashboard.md)
 - [File Upload](docs/features/file-upload.md)
 - [File Browser](docs/features/file-browser.md)
-- [Dashboard](docs/features/dashboard.md)
 - [Metadata Extraction](docs/features/metadata-extraction.md)
 
 ## References

@@ -11,14 +11,23 @@ This is the authoritative control surface for all coding agents. Read this first
 ## 1. Repository Map
 
 ```
-apps/web/          Next.js 16 frontend (App Router, Tailwind v4, shadcn/ui)
+apps/web/          Next.js 16 frontend — /jobs, /search, /corpus, / (dashboard), /files, /upload
 services/api/      FastAPI backend (layered: types/config/repo/service/runtime)
+  service/openclip_model.py  the ONLY place torch / open_clip are imported
+  service/index.py           per-job FAISS index (build/search)
+  service/embedding_run.py   the run pipeline: stream → encode → shards → index
 packages/shared/   Shared TypeScript types
+scripts/seed-corpus.py  seed a synthetic corpus + run one demo job (real OpenCLIP)
 docs/              System of record (features, workflows, security, reliability)
 docs/exec-plans/   Execution plans and tech debt tracker
 infra/railway/     Railway delivery contract (per-service railway.json live at their service roots)
 infra/vercel/      Vercel deployment contract
 ```
+
+This app is **OpenCLIP Batch Embeddings**: an Embedding Job streams a corpus from
+B2, encodes it on-device with OpenCLIP, writes `.npy` shards to `embeddings/<job>/`,
+builds a per-job FAISS index at `indexes/<job>/`, and serves text→image search.
+B2 is the sole store (no database); job manifests live at `jobs/<id>.json`.
 
 ## 2. Building on This Starter Kit
 
@@ -26,12 +35,12 @@ When this repo is used as the foundation for a new app, the following pieces are
 
 **Keep as-is (do not strip, rename, or replace)**
 - **UI kit / design system.** `apps/web/src/components/ui/` (shadcn primitives), the design tokens in `apps/web/src/app/globals.css`, and the `/design` reference page. Build new screens with these primitives; never edit the generated `components/ui/` files directly. Restyling happens through tokens in `globals.css`.
-- **File Explorer.** `/files` route, `apps/web/src/app/files/`, and `apps/web/src/components/files/`. The Files sidebar entry in `apps/web/src/components/layout/app-sidebar.tsx` stays.
-- **Upload.** `/upload` route, `apps/web/src/app/upload/`, and `apps/web/src/components/upload/`. The Upload sidebar entry stays.
-- The sidebar nav itself (Dashboard, Upload, Files, Settings, plus the Design System utility link).
+- **File Explorer.** `/files` route, `apps/web/src/app/files/`, and `apps/web/src/components/files/` — the full-bucket browser. The Files sidebar entry stays.
+- **Upload.** `/upload` route + `apps/web/src/components/upload/`. Uploads land under `corpus/` so they are immediately embeddable. The Upload sidebar entry stays.
+- **App surfaces.** `/jobs` (primary entity), `/search`, `/corpus`, and their sidebar entries are this app's core — do not strip them.
 
 **Adapt to the new use case**
-- **Dashboard.** `/` route and `apps/web/src/components/dashboard/` (stats cards, upload chart, recent uploads table) are illustrative defaults. Replace them with metrics, charts, and tables that reflect what the new app actually does (e.g. transcripts processed, embeddings indexed, classifications run). New aggregations must flow through the same `runtime -> service -> repo` layering and be exposed via TanStack Query hooks in `apps/web/src/lib/queries.ts` — no bare `useEffect + fetch`.
+- **Dashboard.** `/` route and `apps/web/src/components/dashboard/` show embedding-pipeline metrics (corpus images, vectors embedded, shard count + bytes, index size, jobs run), a **write-amplification projection** card, an embedding-throughput chart, and a recent-jobs table — all fed by `GET /pipeline/stats`. New aggregations flow `runtime -> service -> repo` and surface via TanStack Query hooks in `apps/web/src/lib/queries.ts` — no bare `useEffect + fetch`.
 - Update `docs/features/dashboard.md` in the same PR as any dashboard change (see §9).
 
 **Why this contract exists**
@@ -43,8 +52,9 @@ When this repo is used as the foundation for a new app, the following pieces are
 
 - No backward imports across layers
 - No `boto3` outside `repo/`
+- **No `torch` / `open_clip` outside `service/openclip_model.py`** — the OpenCLIP runtime is contained exactly like boto3, so imports/tests never pull in torch (it loads lazily only when a job embeds). Device is auto-detected CUDA → Apple MPS → CPU, defaulting to CPU; never hard-require a GPU.
 - No business logic in route handlers (`runtime/`)
-- All external APIs wrapped in `repo/` adapters
+- All external APIs/models wrapped in `repo/` (storage) or `service/openclip_model.py` (OpenCLIP)
 - All request/response data validated at boundary (Pydantic models)
 - No shared mutable state across layers
 
@@ -72,6 +82,7 @@ When this repo is used as the foundation for a new app, the following pieces are
 |------|-------------|
 | No backward imports | `tests/test_structure.py::test_no_backward_imports` |
 | No boto3 outside repo/ | `tests/test_structure.py::test_boto3_only_in_repo` |
+| No torch/open_clip outside service/openclip_model.py | `tests/test_structure.py::test_torch_openclip_only_in_openclip_model` |
 | Backend app Python file size < 300 lines | `tests/test_structure.py::test_api_app_python_file_size_limit` |
 | All layers exist | `tests/test_structure.py::test_all_layers_exist` |
 | No bare print() | `ruff` rule T20 |

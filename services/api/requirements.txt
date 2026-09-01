@@ -12,6 +12,16 @@ boto3>=1.35.0
 Pillow>=11.0.0
 PyPDF2>=3.0.0
 
+# OpenCLIP + FAISS (local, on-device — no API key, no managed vector service).
+# Pinned to a known-good window to avoid the unpinned-ML false-green trap: the
+# app boots and unit tests pass regardless, but the marquee embedding path only
+# exercises the real model in the seed script / run step. numpy<2 keeps the
+# faiss/torch arm64 ABI happy.
+numpy>=1.26,<2
+torch>=2.2,<3
+open_clip_torch>=2.24,<3
+faiss-cpu>=1.8,<2
+
 # Dev / quality
 ruff>=0.8.0
 pytest>=8.0.0

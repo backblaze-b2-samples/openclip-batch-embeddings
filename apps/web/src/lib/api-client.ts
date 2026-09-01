@@ -1,11 +1,19 @@
 import type {
+  CorpusImage,
   DailyUploadCount,
+  DashboardData,
+  EmbeddingJob,
   FileMetadata,
   FileMetadataDetail,
   FileUploadResponse,
+  JobSummary,
+  Modality,
+  ModelName,
+  Precision,
   PresignUploadResponse,
+  SearchResponse,
   UploadStats,
-} from "@vibe-coding-starter-kit/shared";
+} from "@openclip-batch-embeddings/shared";
 
 // Single-origin deploys (Vercel `services`: one project serving web + API) put
 // the API under /api on the same origin, so no NEXT_PUBLIC_API_URL is needed —
@@ -17,7 +25,7 @@ export const API_BASE =
   (process.env.NODE_ENV === "production" ? "/api" : "http://localhost:8000");
 
 type ApiClientRoute = {
-  method: "delete" | "get" | "post";
+  method: "delete" | "get" | "patch" | "post";
   path: string;
 };
 
@@ -26,6 +34,16 @@ export const API_CLIENT_ROUTES = {
   files: { method: "get", path: "/files" },
   fileStats: { method: "get", path: "/files/stats" },
   uploadActivity: { method: "get", path: "/files/stats/activity" },
+  // Embedding jobs (the primary entity), semantic search, corpus + dashboard.
+  jobs: { method: "get", path: "/jobs" },
+  jobCreate: { method: "post", path: "/jobs" },
+  jobDetail: { method: "get", path: "/jobs/{job_id}" },
+  jobUpdate: { method: "patch", path: "/jobs/{job_id}" },
+  jobDelete: { method: "delete", path: "/jobs/{job_id}" },
+  jobRun: { method: "post", path: "/jobs/{job_id}/run" },
+  search: { method: "post", path: "/search" },
+  corpus: { method: "get", path: "/corpus" },
+  pipelineStats: { method: "get", path: "/pipeline/stats" },
   fileByKeyDownload: { method: "get", path: "/files-by-key/download" },
   fileByKeyPreview: { method: "get", path: "/files-by-key/preview" },
   fileByKeyMetadata: { method: "get", path: "/files-by-key/metadata" },
@@ -350,4 +368,71 @@ function putFileToStorage(
     }
     xhr.send(file);
   });
+}
+
+// --- Embedding jobs + semantic search + corpus + dashboard ---
+
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+export interface JobFormValues {
+  name: string;
+  description: string;
+  model: ModelName;
+  precision: Precision;
+  modality: Modality;
+  source_prefix: string;
+  shard_size: number;
+}
+
+export async function getJobs() {
+  return apiFetch<JobSummary[]>(API_CLIENT_ROUTES.jobs.path);
+}
+
+export async function getJob(id: string) {
+  return apiFetch<EmbeddingJob>(`/jobs/${encodeURIComponent(id)}`);
+}
+
+export async function createJob(values: JobFormValues) {
+  return apiFetch<EmbeddingJob>(API_CLIENT_ROUTES.jobCreate.path, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(values),
+  });
+}
+
+export async function updateJob(id: string, values: Partial<JobFormValues>) {
+  return apiFetch<EmbeddingJob>(`/jobs/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(values),
+  });
+}
+
+export async function deleteJob(id: string) {
+  return apiFetch<{ deleted: boolean; id: string }>(
+    `/jobs/${encodeURIComponent(id)}`,
+    { method: "DELETE" }
+  );
+}
+
+export async function runJob(id: string) {
+  return apiFetch<EmbeddingJob>(`/jobs/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+  });
+}
+
+export async function searchJob(jobId: string, query: string, k = 12) {
+  return apiFetch<SearchResponse>(API_CLIENT_ROUTES.search.path, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ job_id: jobId, query, k }),
+  });
+}
+
+export async function getCorpus() {
+  return apiFetch<CorpusImage[]>(API_CLIENT_ROUTES.corpus.path);
+}
+
+export async function getDashboard() {
+  return apiFetch<DashboardData>(API_CLIENT_ROUTES.pipelineStats.path);
 }

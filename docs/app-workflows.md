@@ -1,53 +1,78 @@
-<!-- last_verified: 2026-08-06 -->
+<!-- last_verified: 2026-09-01 -->
 # App Workflows
 
 User journeys inside the application.
 
-## Upload Files
+## Create and Run an Embedding Job
 
-- User navigates to `/upload`
-- Drops or selects files in the dropzone
-- Client validates file size (max 100MB) and type
-- Files upload **directly from the browser to B2** (a presigned PUT). A determinate progress bar tracks the bytes leaving the browser; once they are all sent the row switches to "Verifying upload..." with an *indeterminate* sweeping bar while the API HEADs and magic-byte-sniffs the stored object. That phase has no percentage to report, and a bar parked at a full 100% read as finished-but-stuck
-- On success: toast notification, green checkmark, and a "View in Files" link through to the browser
-- On failure: red status icon with error message
-- User can clear completed uploads
-- The queue lives in an app-wide provider: navigating to another page keeps the upload running, shows an "Uploading N files" indicator in the header, and keeps the duplicate-upload guard armed
-- Reloading or closing mid-upload asks for confirmation first; if the upload dies anyway, the next load says which file didn't finish
-- See: [File Upload](features/file-upload.md)
+- User navigates to `/jobs` and clicks **New job**
+- The create form uses selectors for finite fields (model, precision, modality) and
+  free text for the source prefix and shard size, with safe-default hints
+  (`corpus/`, `256`) — never an autofill button
+- On save the job is created as a **draft** (nothing embedded yet) and the user lands on `/jobs/[id]`
+- Clicking **Run** streams every image under the source prefix from B2, encodes each
+  on-device with OpenCLIP (CUDA → MPS → CPU), writes `.npy` shards to `embeddings/<job>/`,
+  builds a FAISS index at `indexes/<job>/`, and updates the manifest
+- The detail page then shows status, config, images embedded, shard count + bytes,
+  index size, throughput, and the shard keys on B2
+- A run with no images fails gracefully with a message pointing at the corpus/seed;
+  the POST never 500s
+- **Edit** changes name/description any time; model/precision/source/shard size are
+  locked once the job has run. **Delete** removes the job's shards, index, and manifest
+  (scoped) — the corpus is untouched
+- See: [Embedding Jobs](features/embedding-jobs.md), [Batch Embedding Pipeline](features/batch-embedding-pipeline.md)
 
-## Browse and Manage Files
+## Search a Job's Index
 
-- User navigates to `/files`
-- Page loads the 100 most recent objects from the API (sorted most recent first). While it loads, the page says so on screen and escalates the wording if the wait runs long — a full bucket listing measured 2.8s-21s cold
-- If that limit was hit, a notice states how many objects the bucket actually holds — the page never claims to show everything
-- Files displayed in tree view with folders and type-specific icons
-- Folders auto-expand on load until the *majority* of the listed files are reachable without clicking, so the page's own "click a file" instruction is always actionable. Stopping at the first visible file was not enough: one stray top-level object left the other 99 sealed in collapsed folders while the page claimed to show 100
-- Clicking a file row opens its preview; the per-row actions menu (preview / download / delete) is always visible, on every viewport
-- Arriving at `/files?preview=<key>` expands that file's folders and opens its preview directly. This is how the ⌘K palette and the dashboard's recent-uploads rows hand off a *specific* file; the param is consumed on arrival so it doesn't re-fire later
-- **Preview**: opens dialog with image/PDF preview + metadata panel, and the file's Download / Delete actions — the advertised "click a file" path offers everything the row menu does. The loading state holds until the media paints; a failure offers "Open in a new tab". The preview URL is signed with `Content-Disposition: inline` so PDFs render in place
-- **Download**: shows a pending state on the row plus a toast while the presigned URL is fetched, then starts the download via an anchor click (which, unlike a popup, still works if the click's user activation expired during a slow presign). Failures are reported; the click can never silently do nothing
-- **Delete**: the confirmation dialog stays open showing "Deleting..." until the request settles, then the row disappears with the toast (optimistic cache update) and the list reconciles with the server. The dialog is held deliberately — Radix closes on action click by default, which dismissed the only pending state and left the row looking untouched while the delete was still in flight
-- Empty bucket shows "No files found" with upload prompt
-- See: [File Browser](features/file-browser.md)
+- User navigates to `/search` (or clicks **Search** on a completed job's detail page)
+- Picks a completed job from the selector, types a description, and picks a top-K
+- The query is embedded into the same OpenCLIP space, matched against the job's FAISS
+  index, and the nearest images render as a grid with a similarity badge, streamed
+  from B2 via presigned URLs
+- No matches shows an empty state; an incomplete job returns a "run it first" message
+- See: [Semantic Search](features/semantic-search.md)
+
+## Browse the Corpus
+
+- User navigates to `/corpus`
+- A thumbnail gallery shows the source images under `corpus/` (the sample-scoped view)
+- Empty corpus points to Upload or the seed script; the full-bucket `/files` explorer
+  still browses every prefix
+- See: [Corpus Library](features/corpus-library.md)
 
 ## View Dashboard
 
 - User navigates to `/` (home)
-- Three parallel API calls load: stats, recent files, upload activity — all served from one shared bucket listing that the API warms at startup
-- While stats load, the page states it in words above the cards rather than showing silent skeletons
-- Stats cards show: total files, storage used, uploads today, total downloads
-- Upload chart shows last 7 days of upload activity as bar chart
-- Recent uploads table shows last 10 files with filename, size, type, date. Each filename links to that file's preview on `/files` — `/files` teaches "click a file to preview it", so the same gesture here has to answer rather than being inert text
-- Empty state: "No files uploaded yet" messages
+- `GET /pipeline/stats` fills five stat cards (corpus images, vectors embedded,
+  embedding shards + bytes, index size, jobs run)
+- The write-amplification card projects shard storage at 1M/10M/100M items from the
+  measured bytes/vector, and notes that float16 halves shard bytes
+- The throughput chart plots images/sec per completed job; the recent-jobs table lists
+  the latest jobs with status, vectors, and model
+- Empty state: zeroed cards + "No runs yet"
 - See: [Dashboard](features/dashboard.md)
+
+## Upload Images (ingest)
+
+- User navigates to `/upload`
+- Drops or selects images; the API mints keys under `corpus/` so uploads are
+  immediately embeddable by the default job
+- Files upload **directly from the browser to B2** (a presigned PUT) with a progress
+  bar, then a short "Verifying upload..." phase while the API HEADs + magic-byte-sniffs
+  the stored object
+- On success: a toast and a "View in Files" link; on failure: an error status
+- See: [File Upload](features/file-upload.md)
+
+## Browse and Manage Files (full bucket)
+
+- User navigates to `/files` — the full-bucket explorer (every prefix, not just `corpus/`)
+- Loads the 100 most recent objects in a tree view with preview / download / delete
+- Preview opens image/PDF inline with a metadata panel; delete confirms then reconciles
+- See: [File Browser](features/file-browser.md)
 
 ## Change Preferences
 
-- User navigates to `/settings`
-- A banner at the top states that the page is mostly a demonstration: only Theme is wired up for real, the rest showcases what a settings page can look like when you adapt the kit
-- **Theme** (real): editing it and saving applies it immediately and persists it (`next-themes`), and the header's theme toggle drives the same state
-- **Profile and preference fields** (demo): Display name, Bio, Default file view (Tree/List/Grid), Email me on every upload, Warn me when approaching quota + threshold. Each is labelled "Demo field", persists to `localStorage` only, and drives no behaviour — there is no account system, mailer, quota banner, activity log, or List/Grid view behind them yet
-- Saving reports honestly: a success toast that separates the real theme change from the locally-stored demo values, or a warning toast if the browser blocked storage (theme still changes). It never claims a save that did not happen — the original page toasted "Settings saved" for fields that changed nothing
-- Danger Zone actions are a demo — no real delete runs
+- User navigates to `/settings`; a banner notes only Theme is wired up for real
+- **Theme** persists via `next-themes`; the other fields are labelled demo and persist
+  to `localStorage` only
 - See: [Settings](features/settings.md)

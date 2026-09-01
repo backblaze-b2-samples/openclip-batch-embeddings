@@ -8,19 +8,28 @@ import {
 } from "@tanstack/react-query";
 import {
   ApiError,
+  createJob,
   deleteFile,
+  deleteJob,
+  getCorpus,
+  getDashboard,
   getDownloadUrl,
   getFileDetail,
   getFiles,
   getFileStats,
   getHealth,
+  getJob,
+  getJobs,
   getPreviewUrl,
   getUploadActivity,
+  runJob,
+  updateJob,
+  type JobFormValues,
 } from "@/lib/api-client";
 import type {
   FileMetadata,
   FileMetadataDetail,
-} from "@vibe-coding-starter-kit/shared";
+} from "@openclip-batch-embeddings/shared";
 
 // Single source of truth for query keys. Keep these tightly scoped so that
 // invalidating "files" doesn't blow away unrelated caches, and so an IDE
@@ -35,6 +44,11 @@ export const qk = {
   preview: (key: string) => [...qk.all, "preview", key] as const,
   detail: (key: string) => [...qk.all, "detail", key] as const,
   health: () => [...qk.all, "health"] as const,
+  // Embedding pipeline
+  jobs: () => [...qk.all, "jobs"] as const,
+  job: (id: string) => [...qk.all, "job", id] as const,
+  corpus: () => [...qk.all, "corpus"] as const,
+  dashboard: () => [...qk.all, "dashboard"] as const,
 };
 
 export type Health = Awaited<ReturnType<typeof getHealth>>;
@@ -167,5 +181,60 @@ export function useDeleteFile() {
       dropDeletedFileFromCache(qc, fileKey);
       qc.invalidateQueries({ queryKey: qk.all });
     },
+  });
+}
+
+// --- Embedding jobs + corpus + dashboard ---
+
+export function useJobs() {
+  return useQuery({ queryKey: qk.jobs(), queryFn: getJobs });
+}
+
+export function useJob(id: string | undefined) {
+  return useQuery({
+    queryKey: qk.job(id ?? ""),
+    queryFn: () => getJob(id as string),
+    enabled: !!id,
+  });
+}
+
+export function useCorpus() {
+  return useQuery({ queryKey: qk.corpus(), queryFn: getCorpus });
+}
+
+export function useDashboard() {
+  return useQuery({ queryKey: qk.dashboard(), queryFn: getDashboard });
+}
+
+export function useCreateJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (values: JobFormValues) => createJob(values),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.all }),
+  });
+}
+
+export function useUpdateJob(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (values: Partial<JobFormValues>) => updateJob(id, values),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.all }),
+  });
+}
+
+export function useDeleteJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteJob(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.all }),
+  });
+}
+
+export function useRunJob(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => runJob(id),
+    // A run rewrites shards, the index, and every dashboard aggregation.
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.all }),
   });
 }

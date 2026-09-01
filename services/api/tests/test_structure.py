@@ -82,6 +82,26 @@ def test_boto3_only_in_repo():
     assert violations == [], "boto3 boundary violations:\n" + "\n".join(violations)
 
 
+def test_torch_openclip_only_in_openclip_model():
+    """torch / open_clip may only be imported in service/openclip_model.py.
+
+    The OpenCLIP runtime is contained exactly like boto3 so the app's imports
+    (and its unit tests) never pull in torch — the heavy stack loads lazily only
+    when a job actually embeds.
+    """
+    allowed = APP_ROOT / "service" / "openclip_model.py"
+    violations = []
+    for pyfile in _get_python_files(APP_ROOT):
+        if pyfile == allowed:
+            continue
+        for imp in _get_imports(pyfile):
+            root = imp.split(".")[0]
+            if root in ("torch", "open_clip"):
+                rel = pyfile.relative_to(APP_ROOT.parent)
+                violations.append(f"{rel}: {imp} imported outside service/openclip_model.py")
+    assert violations == [], "torch/open_clip boundary violations:\n" + "\n".join(violations)
+
+
 def test_api_app_python_file_size_limit():
     """Verify authored Python under services/api/app stays within 300 lines."""
     violations = []

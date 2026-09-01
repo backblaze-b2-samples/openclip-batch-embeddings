@@ -1,6 +1,46 @@
 {
   "components": {
     "schemas": {
+      "CorpusImage": {
+        "description": "One source image in the sample-scoped corpus gallery.",
+        "properties": {
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "size_human": {
+            "title": "Size Human",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "filename",
+          "size_bytes",
+          "size_human"
+        ],
+        "title": "CorpusImage",
+        "type": "object"
+      },
       "DailyUploadCount": {
         "properties": {
           "date": {
@@ -17,6 +57,169 @@
           "uploads"
         ],
         "title": "DailyUploadCount",
+        "type": "object"
+      },
+      "DashboardData": {
+        "properties": {
+          "float16_bytes_per_vector": {
+            "title": "Float16 Bytes Per Vector",
+            "type": "integer"
+          },
+          "float32_bytes_per_vector": {
+            "title": "Float32 Bytes Per Vector",
+            "type": "integer"
+          },
+          "projection": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectionPoint"
+            },
+            "title": "Projection",
+            "type": "array"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/PipelineStats"
+          },
+          "throughput": {
+            "items": {
+              "$ref": "#/components/schemas/ThroughputPoint"
+            },
+            "title": "Throughput",
+            "type": "array"
+          }
+        },
+        "required": [
+          "stats",
+          "projection",
+          "float32_bytes_per_vector",
+          "float16_bytes_per_vector",
+          "throughput"
+        ],
+        "title": "DashboardData",
+        "type": "object"
+      },
+      "EmbeddingJob": {
+        "description": "The primary entity: one batch-embedding run and its B2 artifacts.",
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/JobConfig"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "dim": {
+            "default": 512,
+            "title": "Dim",
+            "type": "integer"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "image_count": {
+            "default": 0,
+            "title": "Image Count",
+            "type": "integer"
+          },
+          "index_bytes": {
+            "default": 0,
+            "title": "Index Bytes",
+            "type": "integer"
+          },
+          "index_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Key"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "shard_bytes": {
+            "default": 0,
+            "title": "Shard Bytes",
+            "type": "integer"
+          },
+          "shard_count": {
+            "default": 0,
+            "title": "Shard Count",
+            "type": "integer"
+          },
+          "shard_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shard Keys",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "throughput_per_second": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Throughput Per Second"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "vector_count": {
+            "default": 0,
+            "title": "Vector Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "config",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EmbeddingJob",
         "type": "object"
       },
       "FileMetadata": {
@@ -307,6 +510,319 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "JobConfig": {
+        "description": "The knobs a run reads. Locked once a job has run (see edit rules).",
+        "properties": {
+          "modality": {
+            "$ref": "#/components/schemas/Modality",
+            "default": "images"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelName",
+            "default": "ViT-B-32/laion2b_s34b_b79k"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/Precision",
+            "default": "float32"
+          },
+          "shard_size": {
+            "default": 256,
+            "title": "Shard Size",
+            "type": "integer"
+          },
+          "source_prefix": {
+            "default": "corpus/",
+            "title": "Source Prefix",
+            "type": "string"
+          }
+        },
+        "title": "JobConfig",
+        "type": "object"
+      },
+      "JobCreate": {
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Description",
+            "type": "string"
+          },
+          "modality": {
+            "$ref": "#/components/schemas/Modality",
+            "default": "images"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelName",
+            "default": "ViT-B-32/laion2b_s34b_b79k"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/Precision",
+            "default": "float32"
+          },
+          "shard_size": {
+            "default": 256,
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Shard Size",
+            "type": "integer"
+          },
+          "source_prefix": {
+            "default": "corpus/",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "JobCreate",
+        "type": "object"
+      },
+      "JobStatus": {
+        "enum": [
+          "draft",
+          "running",
+          "complete",
+          "failed"
+        ],
+        "title": "JobStatus",
+        "type": "string"
+      },
+      "JobSummary": {
+        "description": "Lightweight row for the jobs list and the dashboard's recent-jobs table.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "image_count": {
+            "title": "Image Count",
+            "type": "integer"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelName"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/Precision"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "vector_count": {
+            "title": "Vector Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "model",
+          "precision",
+          "image_count",
+          "vector_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobSummary",
+        "type": "object"
+      },
+      "JobUpdate": {
+        "description": "Name/description are always editable; config fields only while `draft`.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Precision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shard_size": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shard Size"
+          },
+          "source_prefix": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Prefix"
+          }
+        },
+        "title": "JobUpdate",
+        "type": "object"
+      },
+      "Modality": {
+        "description": "What the job embeds. Images today; text-metadata may follow.",
+        "enum": [
+          "images"
+        ],
+        "title": "Modality",
+        "type": "string"
+      },
+      "ModelName": {
+        "description": "Finite set of OpenCLIP checkpoints \u2014 a selector in the UI.\n\nBoth are 512-d so a job's index dimension is fixed and search always\noperates within one model's vector space. The value is `<arch>/<pretrained>`;\nthe encoder splits it on `/` when loading (see service/openclip_model.py).",
+        "enum": [
+          "ViT-B-32/laion2b_s34b_b79k",
+          "ViT-B-16/laion2b_s34b_b79k"
+        ],
+        "title": "ModelName",
+        "type": "string"
+      },
+      "PipelineStats": {
+        "description": "Headline embedding-pipeline metrics for the dashboard stat cards.",
+        "properties": {
+          "bytes_per_vector": {
+            "title": "Bytes Per Vector",
+            "type": "number"
+          },
+          "corpus_images": {
+            "title": "Corpus Images",
+            "type": "integer"
+          },
+          "index_bytes": {
+            "title": "Index Bytes",
+            "type": "integer"
+          },
+          "index_bytes_human": {
+            "title": "Index Bytes Human",
+            "type": "string"
+          },
+          "jobs_complete": {
+            "title": "Jobs Complete",
+            "type": "integer"
+          },
+          "jobs_total": {
+            "title": "Jobs Total",
+            "type": "integer"
+          },
+          "shard_bytes": {
+            "title": "Shard Bytes",
+            "type": "integer"
+          },
+          "shard_bytes_human": {
+            "title": "Shard Bytes Human",
+            "type": "string"
+          },
+          "shard_count": {
+            "title": "Shard Count",
+            "type": "integer"
+          },
+          "vectors_embedded": {
+            "title": "Vectors Embedded",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "corpus_images",
+          "vectors_embedded",
+          "shard_count",
+          "shard_bytes",
+          "shard_bytes_human",
+          "index_bytes",
+          "index_bytes_human",
+          "jobs_total",
+          "jobs_complete",
+          "bytes_per_vector"
+        ],
+        "title": "PipelineStats",
+        "type": "object"
+      },
+      "Precision": {
+        "description": "Storage precision for the `.npy` embedding shards. Finite set.",
+        "enum": [
+          "float32",
+          "float16"
+        ],
+        "title": "Precision",
+        "type": "string"
+      },
       "PresignUploadRequest": {
         "description": "What the browser declares before uploading directly to B2.",
         "properties": {
@@ -371,6 +887,158 @@
           "expires_in"
         ],
         "title": "PresignUploadResponse",
+        "type": "object"
+      },
+      "ProjectionPoint": {
+        "description": "Projected embedding-shard storage at scale, from the measured ratio.",
+        "properties": {
+          "items": {
+            "title": "Items",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "projected_bytes": {
+            "title": "Projected Bytes",
+            "type": "integer"
+          },
+          "projected_human": {
+            "title": "Projected Human",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "label",
+          "projected_bytes",
+          "projected_human"
+        ],
+        "title": "ProjectionPoint",
+        "type": "object"
+      },
+      "SearchHit": {
+        "description": "A single ranked image, hydrated with a browser-renderable URL.",
+        "properties": {
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "score"
+        ],
+        "title": "SearchHit",
+        "type": "object"
+      },
+      "SearchRequest": {
+        "properties": {
+          "job_id": {
+            "minLength": 1,
+            "title": "Job Id",
+            "type": "string"
+          },
+          "k": {
+            "default": 12,
+            "maximum": 48.0,
+            "minimum": 1.0,
+            "title": "K",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "query"
+        ],
+        "title": "SearchRequest",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "query",
+          "count",
+          "hits"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "ThroughputPoint": {
+        "description": "Per-job embedding throughput for the dashboard chart.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "items_per_second": {
+            "title": "Items Per Second",
+            "type": "number"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "vector_count": {
+            "title": "Vector Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job_id",
+          "name",
+          "items_per_second",
+          "vector_count",
+          "created_at"
+        ],
+        "title": "ThroughputPoint",
         "type": "object"
       },
       "UploadStats": {
@@ -463,12 +1131,38 @@
     }
   },
   "info": {
-    "description": "Local API for the Vibe Coding Starter Kit template, providing file upload and management backed by Backblaze B2. This contract documents the template's local API, not a hosted public endpoint.",
-    "title": "Vibe Coding Starter Kit API",
+    "description": "Local API for OpenCLIP Batch Embeddings \u2014 a batch image/text embedding pipeline that streams a corpus from Backblaze B2, encodes it on-device with OpenCLIP, and writes .npy embedding shards and a FAISS index back to B2. This contract documents the app's local API, not a hosted public endpoint.",
+    "title": "OpenCLIP Batch Embeddings API",
     "version": "0.1.0"
   },
   "openapi": "3.1.0",
   "paths": {
+    "/corpus": {
+      "get": {
+        "description": "Scoped gallery of the source images under corpus/ (not the full bucket).",
+        "operationId": "list_corpus_endpoint_corpus_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CorpusImage"
+                  },
+                  "title": "Response List Corpus Endpoint Corpus Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Corpus Endpoint",
+        "tags": [
+          "corpus"
+        ]
+      }
+    },
     "/files": {
       "get": {
         "operationId": "list_files_endpoint_files_get",
@@ -980,6 +1674,243 @@
         ]
       }
     },
+    "/jobs": {
+      "get": {
+        "operationId": "list_jobs_endpoint_jobs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobSummary"
+                  },
+                  "title": "Response List Jobs Endpoint Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Jobs Endpoint",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "post": {
+        "operationId": "create_job_endpoint_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Job Endpoint",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/jobs/{job_id}": {
+      "delete": {
+        "operationId": "delete_job_endpoint_jobs__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Job Endpoint",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "get": {
+        "operationId": "get_job_endpoint_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Job Endpoint",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "patch": {
+        "operationId": "update_job_endpoint_jobs__job_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Job Endpoint",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/jobs/{job_id}/run": {
+      "post": {
+        "description": "Marquee action: stream \u2192 encode \u2192 write shards \u2192 build+upload index.\n\nReturns the updated job (status `complete` or `failed`); a pipeline error is\nrecorded on the manifest rather than 500ing.",
+        "operationId": "run_job_endpoint_jobs__job_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Job Endpoint",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
     "/metrics": {
       "get": {
         "operationId": "metrics_metrics_get",
@@ -996,6 +1927,70 @@
         "summary": "Metrics",
         "tags": [
           "metrics"
+        ]
+      }
+    },
+    "/pipeline/stats": {
+      "get": {
+        "description": "Embedding-pipeline metrics, write-amplification projection, and throughput.",
+        "operationId": "pipeline_stats_endpoint_pipeline_stats_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardData"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Pipeline Stats Endpoint",
+        "tags": [
+          "pipeline"
+        ]
+      }
+    },
+    "/search": {
+      "post": {
+        "description": "Text \u2192 nearest corpus images within one job's OpenCLIP/FAISS vector space.",
+        "operationId": "search_endpoint_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Endpoint",
+        "tags": [
+          "search"
         ]
       }
     },

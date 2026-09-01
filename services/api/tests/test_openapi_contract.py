@@ -34,11 +34,13 @@ def test_openapi_metadata_uses_canonical_local_api_identity():
     schema = app.openapi()
 
     assert schema["info"] == {
-        "title": "Vibe Coding Starter Kit API",
+        "title": "OpenCLIP Batch Embeddings API",
         "description": (
-            "Local API for the Vibe Coding Starter Kit template, providing file "
-            "upload and management backed by Backblaze B2. This contract "
-            "documents the template's local API, not a hosted public endpoint."
+            "Local API for OpenCLIP Batch Embeddings — a batch image/text embedding "
+            "pipeline that streams a corpus from Backblaze B2, encodes it on-device "
+            "with OpenCLIP, and writes .npy embedding shards and a FAISS index back "
+            "to B2. This contract documents the app's local API, not a hosted "
+            "public endpoint."
         ),
         "version": "0.1.0",
     }

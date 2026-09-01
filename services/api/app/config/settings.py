@@ -2,74 +2,75 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    b2_endpoint: str = "https://s3.us-west-004.backblazeb2.com"
-    b2_key_id: str = ""
+    # --- Backblaze B2 (S3-compatible) ---
+    # Standard B2_* names (parent CLAUDE.md standard #3). The endpoint is
+    # derived from the region so a fork only sets B2_REGION; B2_ENDPOINT stays
+    # an optional explicit override and no region string is hardcoded in source.
+    b2_application_key_id: str = ""
     b2_application_key: str = ""
     b2_bucket_name: str = ""
-    b2_public_url: str = ""
+    b2_region: str = ""
+    # Optional explicit endpoint override. When empty, `endpoint_url` derives
+    # it from b2_region.
+    b2_endpoint: str = ""
+    # Optional. Only used to build public object URLs when the bucket is
+    # public; corpus/result images stream via presigned URLs when this is
+    # unset, so it must never be treated as required.
+    b2_public_url_base: str = ""
 
     api_port: int = 8000
     # Interactive API docs (/docs, /redoc, /openapi.json). On by default for
-    # local dev and starter-kit exploration; set false to hide the full API
-    # surface in production.
+    # local dev and exploration; set false to hide the full API surface.
     enable_docs: bool = True
     # Explicit allowlist by default — covers Next on :3000 and the
     # fallback :3001 it picks if 3000 is busy. Production deploys should
     # override with the exact frontend origin.
     api_cors_origins: str = "http://localhost:3000,http://localhost:3001"
     # Optional dev-only escape hatch: a regex that matches additional
-    # allowed origins. Empty by default — set this to e.g.
-    # `^http://localhost:\d+$` to accept any localhost port without
-    # listing each one. NEVER ship this to production.
+    # allowed origins. Empty by default. NEVER ship this to production.
     api_cors_origin_regex: str = ""
 
-    # Upload limits
+    # Upload limits (corpus images)
     max_file_size: int = 100 * 1024 * 1024  # 100MB
-    # TTL for the presigned PUT the browser uploads directly to B2 with. Long
-    # enough for a big file on a slow link, short enough that a leaked URL is a
-    # narrow, single-key, single-size window.
+    # TTL for the presigned PUT the browser uploads directly to B2 with.
     presign_upload_expiry_seconds: int = 900  # 15 minutes
 
-    # Optional confinement for key-addressed reads/deletes. Empty by default so
-    # the by-key routes accept any key shape (they deliberately support nested
-    # folders and reserved-word segments). Point a fork at a bucket shared with
-    # other data? Set to e.g. "uploads/" to restrict all key ops to app uploads.
+    # Optional confinement for key-addressed reads/deletes in the full-bucket
+    # explorer. Empty by default so the by-key routes accept any key shape.
     allowed_key_prefix: str = ""
 
     # Full-bucket listing cache (repo/list_cache.py). Both /files and
-    # /files/stats need every object, and paginating a 16k-object bucket takes
-    # ~8-20s, so one scan is shared. Entries older than the TTL are still
-    # served *immediately* while a background thread refreshes them
-    # (stale-while-revalidate), so only the very first scan can make a user
-    # wait. Uploads and deletes invalidate the cache outright, so the app's own
-    # writes are never served stale — only bucket changes made elsewhere can lag
-    # by up to this TTL.
+    # /files/stats need every object; entries older than the TTL are served
+    # immediately while a background thread refreshes them.
     list_cache_ttl_seconds: float = 300.0
-    # Scan the bucket once at startup so the first page view doesn't pay for the
-    # cold scan. Set false for offline dev or when startup must not touch B2.
     warm_list_cache_on_startup: bool = True
 
-    # Rate limiting (per client IP, per 60s window). In-process per replica —
-    # documented in docs/RELIABILITY.md; horizontal scaling needs a shared
-    # store (e.g. Redis). Writes/downloads get the tighter cap.
+    # Rate limiting (per client IP, per 60s window). In-process per replica.
     rate_limit_per_minute: int = 120
-    # Covers uploads, deletes, downloads and previews — kept generous enough
-    # that a normal browsing/upload session doesn't trip it.
     rate_limit_write_per_minute: int = 60
 
-    # Small durable counters (downloads, etc). Relative paths resolve against
-    # the repo root (see repo/counter.py). Point at a persistent volume in
-    # production if you care about surviving restarts.
-    #
-    # It must stay OUTSIDE services/api/: that is the directory `uvicorn
-    # --reload` watches in dev, so a counter file there means every download
-    # writes into the reloader's watch tree. Today uvicorn only restarts for
-    # `*.py`, so the writes surface as misleading "N changes detected" log noise
-    # on every download — but a single added `--reload-include` would turn a
-    # normal user action into an API restart that drops in-flight requests.
+    # Small durable counters (downloads, etc). Kept OUTSIDE services/api/ so the
+    # uvicorn --reload watch tree is untouched by counter writes.
     download_count_file: str = ".data/download_count.json"
 
+    # --- Embedding-pipeline layout ---
+    # Bucket key prefixes for the four parallel artifact sets. B2 is the sole
+    # store — there is no application database.
+    corpus_prefix: str = "corpus/"
+    jobs_prefix: str = "jobs/"
+    embeddings_prefix: str = "embeddings/"
+    indexes_prefix: str = "indexes/"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    @property
+    def endpoint_url(self) -> str:
+        """Resolve the S3 endpoint: explicit override wins, else derive from region."""
+        if self.b2_endpoint:
+            return self.b2_endpoint
+        if self.b2_region:
+            return f"https://s3.{self.b2_region}.backblazeb2.com"
+        return ""
 
     @property
     def cors_origins(self) -> list[str]:
