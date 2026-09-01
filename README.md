@@ -22,6 +22,28 @@ makes the production write-amplification story concrete.
 - **Full-bucket file browser + upload** — the reusable B2-backed scaffolding (`/files`, `/upload`).
 - Local, GPU-optional OpenCLIP inference — CPU by default; auto-detects CUDA → MPS → CPU.
 
+## What it looks like
+
+**Dashboard** — corpus, vector, shard, and index metrics, a write-amplification projection at scale, an embedding-throughput chart, and recent jobs.
+
+![Dashboard with corpus/vector/shard/index metrics, a write-amplification table, a throughput chart, and a recent-jobs table](docs/images/dashboard.png)
+
+**Jobs** — every embedding job with its model, precision, vector count, and run duration.
+
+![Embedding Jobs list showing each job's status, model, vectors, and duration](docs/images/jobs.png)
+
+**Job detail** — one job's configuration alongside the run artifacts it wrote to B2: the `.npy` shards and the FAISS index key.
+
+![Job detail with configuration, run artifacts, and the B2 shard and index keys](docs/images/job-detail.png)
+
+**Semantic search** — a text query embedded into the same OpenCLIP space and ranked against a job's FAISS index, with every image streamed from B2.
+
+![Semantic search results for a text query, each card scored by cosine similarity](docs/images/search.png)
+
+**Corpus** — the source images the pipeline embeds, under the `corpus/` prefix in B2.
+
+![Corpus gallery of the source images stored under the corpus prefix in B2](docs/images/corpus.png)
+
 ## Quick Start
 
 You need: Node.js >= 20, pnpm >= 9, Python >= 3.12, and a free
