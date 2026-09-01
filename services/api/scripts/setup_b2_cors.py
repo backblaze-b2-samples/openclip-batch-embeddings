@@ -49,7 +49,7 @@ def _client():
     # Standalone client (not app.repo.get_s3_client) on purpose: bucket-level
     # CORS calls sign more reliably with an explicit region, whereas the app
     # client leaves region unset for object ops. The region comes from
-    # B2_REGION (or the host of an explicit B2_ENDPOINT override) — never a
+    # B2_REGION via the derived endpoint host — never a
     # hardcoded string.
     host = settings.endpoint_url.split("://", 1)[-1]
     region = settings.b2_region or (

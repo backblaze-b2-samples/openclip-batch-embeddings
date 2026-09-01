@@ -3,16 +3,13 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # --- Backblaze B2 (S3-compatible) ---
-    # Standard B2_* names (parent CLAUDE.md standard #3). The endpoint is
-    # derived from the region so a fork only sets B2_REGION; B2_ENDPOINT stays
-    # an optional explicit override and no region string is hardcoded in source.
+    # Standard B2_* names (parent CLAUDE.md standard #3). The S3 endpoint is
+    # derived from B2_REGION, so a fork sets only the five standard names and
+    # no region string is hardcoded in source.
     b2_application_key_id: str = ""
     b2_application_key: str = ""
     b2_bucket_name: str = ""
     b2_region: str = ""
-    # Optional explicit endpoint override. When empty, `endpoint_url` derives
-    # it from b2_region.
-    b2_endpoint: str = ""
     # Optional. Only used to build public object URLs when the bucket is
     # public; corpus/result images stream via presigned URLs when this is
     # unset, so it must never be treated as required.
@@ -65,9 +62,7 @@ class Settings(BaseSettings):
 
     @property
     def endpoint_url(self) -> str:
-        """Resolve the S3 endpoint: explicit override wins, else derive from region."""
-        if self.b2_endpoint:
-            return self.b2_endpoint
+        """Derive the S3 endpoint from b2_region (Standard #3: no endpoint var)."""
         if self.b2_region:
             return f"https://s3.{self.b2_region}.backblazeb2.com"
         return ""
